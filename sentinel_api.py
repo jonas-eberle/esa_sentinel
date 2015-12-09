@@ -1,5 +1,5 @@
 """
-Sentinel Search & Download API
+ESA Sentinel Search & Download API
 Authors: Jonas Eberle <jonas.eberle@uni-jena.de>, Felix Cremer <felix.cremer@uni-jena.de>
 
 Libraries needed: Shapely, GDAL/OGR, JSON, Progressbar, Zipfile, Datetime, Requests
@@ -265,6 +265,7 @@ class SentinelDownloader(object):
                 down.close()
             except KeyboardInterrupt:
                 print("\nKeyboard interruption, remove current download and exit execution of script")
+                down.close()
                 os.remove(path)
                 sys.exit(0)
 
@@ -508,7 +509,7 @@ def main(username, password):
         'POLYGON ((13.501756184061247 58.390759025092443,13.617310497771715 58.371827474899703,13.620921570075168 58.27891592167088,13.508978328668151 58.233319081414017,13.382590798047325 58.263723491583974,13.382590798047325 58.263723491583974,13.501756184061247 58.390759025092443))')
     s1.set_download_dir('./')  # default is current directory
     s1.search('S1A*', 0.8, productType='GRD', sensoroperationalmode='IW')
-    s1.write_results(type='wget', file='sentinel_api_download.sh')  # use wget, urls or json as type
-    # s1.download_all()
+    s1.write_results(file_type='wget', filename='sentinel_api_download.sh')  # use wget, urls or json as type
+    s1.download_all()
 
     return s1
