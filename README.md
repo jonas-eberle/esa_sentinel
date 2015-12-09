@@ -18,7 +18,7 @@ The API has been tested with Python2.7 under Unix and Windows 7.
 
 Usage of API in Python
 -----------
-Please see download_s1.py and download_s2.py with two examples. 
+Please see example_s1.py, example_s1_setgeom.py, and example_s2.py with three examples. 
 
 To load features/geometries you can use either the "load_sites" method given a geospatial file or the "set_geometries" method to directly set a geometry in the Well-known-Text (Wkt) format. 
  
