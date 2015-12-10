@@ -9,7 +9,7 @@ TODO:
 - Documentation
 """
 
-__version__ = '0.3'
+__version__ = '0.4'
 
 ###########################################################
 # imports
@@ -241,7 +241,7 @@ class SentinelDownloader(object):
             print('===========================================================')
             print('Download file path: %s' % path)
 
-            response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True)
+            response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True, verify=False)
             size = int(response.headers['Content-Length'].strip())
             if size < 1000000:
                 print 'The found scene: %s is to small' % scene['title']
@@ -327,7 +327,7 @@ class SentinelDownloader(object):
 
         """
         try:
-            content = requests.get(url, auth=(self.__esa_username, self.__esa_password))
+            content = requests.get(url, auth=(self.__esa_username, self.__esa_password), verify=False)
             if not content.status_code // 100 == 2:
                 print('Error: API returned unexpected response {}:'.format(content.status_code))
                 print(content.text)
