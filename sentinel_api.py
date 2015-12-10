@@ -123,13 +123,13 @@ class SentinelDownloader(object):
         self.__geometries = geometries
         print('Found %s features' % len(geometries))
 
-    def search(self, platform, max_overlap=0, download_dir=None, start_date=None, end_date=None,
+    def search(self, platform, min_overlap=0, download_dir=None, start_date=None, end_date=None,
                date_type='beginPosition', **keywords):
         """Search in ESA Data Hub for scenes with given arguments
 
         Args:
             platform: Define which data to search for (either 'S1A*' for Sentinel-1A or 'S2A*' for Sentinel-2A)
-            max_overlap: Define maximum overlap (0-1) between area of interest and scene footprint (Default: 0)
+            min_overlap: Define minimum overlap (0-1) between area of interest and scene footprint (Default: 0)
             download_dir: Define download directory to filter prior downloaded scenes (Default: None)
             startDate: Define starting date of search (Default: None, all data)
             endDate: Define ending date of search (Default: None, all data)
@@ -142,7 +142,7 @@ class SentinelDownloader(object):
             platform
 
         Example usage:
-            s1.search('S1A*', max_overlap=0.5, productType='GRD')
+            s1.search('S1A*', min_overlap=0.5, productType='GRD')
 
         """
         print('===========================================================')
@@ -179,7 +179,7 @@ class SentinelDownloader(object):
             print '%s scenes after initial search' % len(scenes)
             if len(scenes) > 0:
                 scenes = self._filter_existing(scenes, self.__download_dir)
-                scenes = self._filter_overlap(scenes, geom, max_overlap)
+                scenes = self._filter_overlap(scenes, geom, min_overlap)
                 print '%s scenes after filtering before merging' % len(scenes)
                 self.__scenes = self._merge_scenes(self.__scenes, scenes)
 
@@ -393,13 +393,13 @@ class SentinelDownloader(object):
                 filtered.append(scene)
         return filtered
 
-    def _filter_overlap(self, scenes, wkt_geometry, max_overlap=0):
-        """Filter scenes based on the maximum overlap to the area of interest
+    def _filter_overlap(self, scenes, wkt_geometry, min_overlap=0):
+        """Filter scenes based on the minimum overlap to the area of interest
 
         Args:
             scenes: List of scenes to filter
             wkt_geometry: Wkt Geometry representation of the area of interest
-            max_overlap: Maximum overlap (0-1) in decimal format between scene geometry and area of interest
+            min_overlap: Minimum overlap (0-1) in decimal format between scene geometry and area of interest
 
         Returns:
             Filtered list of scenes
@@ -413,8 +413,9 @@ class SentinelDownloader(object):
             footprint = loads(scene['footprint'])
             intersect = site.intersection(footprint)
             overlap = intersect.area / site.area
-            if overlap > max_overlap or (
-                    site.area / footprint.area > 1 and intersect.area / footprint.area > max_overlap):
+            # print str(overlap)
+            if overlap > min_overlap or (
+                    site.area / footprint.area > 1 and intersect.area / footprint.area > min_overlap):
                 scene['_script_overlap'] = overlap * 100
                 filtered.append(scene)
 

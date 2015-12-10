@@ -18,8 +18,8 @@ s1.set_download_dir('./')
 # set geometry from Well-known-Text format
 s1.set_geometries('POLYGON ((13.501756184061247 58.390759025092443,13.617310497771715 58.371827474899703,13.620921570075168 58.27891592167088,13.508978328668151 58.233319081414017,13.382590798047325 58.263723491583974,13.382590798047325 58.263723491583974,13.501756184061247 58.390759025092443))')
 
-# search for scenes with some restrictions
-s1.search('S1A*', max_overlap=0.01, productType='GRD', sensoroperationalmode='IW')
+# search for scenes with some restrictions (minimum overlap: 1%)
+s1.search('S1A*', min_overlap=0.01, productType='GRD', sensoroperationalmode='IW')
 
 # you can either write results to a bash file for wget or download files directly in this script
 # s1.write_results('wget', 'sentinel_api_s1_download.sh')

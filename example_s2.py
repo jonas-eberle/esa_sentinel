@@ -18,8 +18,8 @@ s2.set_download_dir('./')
 # load geometries from shapefile
 s2.load_sites('wetlands_v8.shp')
 
-# search for scenes with some restrictions
-s2.search('S2A*', max_overlap=0.01)
+# search for scenes with some restrictions (minimum overlap: 1%)
+s2.search('S2A*', min_overlap=0.01)
 
 # you can either write results to a bash file for wget or download files directly in this script
 # s2.write_results('wget', 'sentinel_api_s2_download.sh')

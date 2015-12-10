@@ -18,8 +18,8 @@ s1.set_download_dir('./')
 # load geometries from shapefile
 s1.load_sites('wetlands_v8.shp')
 
-# search for scenes with some restrictions
-s1.search('S1A*', max_overlap=0.01, productType='GRD', sensoroperationalmode='IW')
+# search for scenes with some restrictions (minimum overlap: 1%)
+s1.search('S1A*', min_overlap=0.01, productType='GRD', sensoroperationalmode='IW')
 
 # you can either write results to a bash file for wget or download files directly in this script
 # s1.write_results('wget', 'sentinel_api_s1_download.sh')
