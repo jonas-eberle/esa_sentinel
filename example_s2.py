@@ -8,7 +8,7 @@ password = '****YOUR_ESA_DATA_HUB_PASSWORD****'
 # please also specify the Hub URL:
 # All Sentinel-1 and -2 scenes beginning from 15th Nov. 2015: https://scihub.esa.int/apihub/
 # All historic Sentinel-1 scenes: https://scihub.esa.int/dhus/
-s2 = api.SentinelDownloader(username, password, api_url='https://scihub.esa.int/apihub/')
+s2 = api.SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
 
 # set directory for
 # - filter scenes list with existing files

@@ -25,7 +25,7 @@ To load features/geometries you can use either the "load_sites" method given a g
 Please note: Using the "set_geometries" method the projection has to be in Lat/Long, EPSG:4326. 
 
 The "search" method can be used with further parameters according to the OpenSearch protocol from the ESA Data Hub (see "productType" and "sensoroperationalmode" as an example below): 
-https://scihub.esa.int/twiki/do/view/SciHubUserGuide/3FullTextSearch#Search_Keywords
+https://scihub.copernicus.eu/twiki/do/view/SciHubUserGuide/3FullTextSearch#Search_Keywords
 
 Example:
 
@@ -36,9 +36,9 @@ Example:
     password = '****YOUR_ESA_DATA_HUB_PASSWORD****'
     
     # please also specify the Hub URL:
-    # All Sentinel-1 and -2 scenes beginning from 15th Nov. 2015: https://scihub.esa.int/apihub/
-    # All historic Sentinel-1 scenes: https://scihub.esa.int/dhus/
-    s1 = api.SentinelDownloader(username, password, api_url='https://scihub.esa.int/apihub/')
+    # All Sentinel-1 and -2 scenes beginning from 15th Nov. 2015: https://scihub.copernicus.eu/apihub/
+    # All historic Sentinel-1 scenes: https://scihub.copernicus.eu/dhus/
+    s1 = api.SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
     
     # set directory for
     # - filter scenes list with existing files

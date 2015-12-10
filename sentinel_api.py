@@ -38,7 +38,7 @@ class SentinelDownloader(object):
     __scenes = []
     __download_dir = './'
 
-    def __init__(self, username, password, api_url='https://scihub.esa.int/apihub/'):
+    def __init__(self, username, password, api_url='https://scihub.copernicus.eu/apihub/'):
         self.__esa_api_url = api_url
         self.__esa_username = username
         self.__esa_password = password
@@ -495,7 +495,7 @@ def main(username, password):
         username: Your username of ESA Data Hub
         password: Your password of ESA Data Hub
 
-    s1 = SentinelDownloader(username, password, api_url='https://scihub.esa.int/apihub/')
+    s1 = SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
     s1.set_geometries('POLYGON ((13.501756184061247 58.390759025092443,13.617310497771715 58.371827474899703,13.620921570075168 58.27891592167088,13.508978328668151 58.233319081414017,13.382590798047325 58.263723491583974,13.382590798047325 58.263723491583974,13.501756184061247 58.390759025092443))')
     s1.set_download_dir('./') # default is current directory
     s1.search('S1A*', 0.8, productType='GRD', sensoroperationalmode='IW')
@@ -504,7 +504,7 @@ def main(username, password):
 
     """
 
-    s1 = SentinelDownloader(username, password, api_url='https://scihub.esa.int/apihub/')
+    s1 = SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
     # s1.load_sites('wetlands_v8.shp')
     s1.set_geometries(
         'POLYGON ((13.501756184061247 58.390759025092443,13.617310497771715 58.371827474899703,13.620921570075168 58.27891592167088,13.508978328668151 58.233319081414017,13.382590798047325 58.263723491583974,13.382590798047325 58.263723491583974,13.501756184061247 58.390759025092443))')
