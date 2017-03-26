@@ -1,6 +1,6 @@
 """
 ESA Sentinel Search & Download API
-Authors: Jonas Eberle <jonas.eberle@uni-jena.de>, Felix Cremer <felix.cremer@uni-jena.de>
+Authors: Jonas Eberle <jonas.eberle@uni-jena.de>, Felix Cremer <felix.cremer@uni-jena.de>, John Truckenbrodt <john.truckenbrodt@uni-jena.de>
 
 Libraries needed: Shapely, GDAL/OGR, JSON, Progressbar, Zipfile, Datetime, Requests
 Example usage: Please see the "main" function at the end of this file
@@ -9,13 +9,14 @@ TODO:
 - Documentation
 """
 
-__version__ = '0.4'
+__version__ = '0.5'
 
 ###########################################################
 # imports
 ###########################################################
 
 import os
+import zlib
 import sys
 import requests
 
@@ -23,7 +24,7 @@ from shapely.wkt import loads
 from osgeo import ogr, osr
 import json
 import progressbar as pb
-import zipfile
+import zipfile as zf
 from datetime import datetime, date
 
 
@@ -67,8 +68,8 @@ class SentinelDownloader(object):
                 Geometries have to be in Lat/Lng, EPSG:4326 projection!
 
         """
-        print('Set geometries:')
-        print(geometries)
+        # print('Set geometries:')
+        # print(geometries)
         if isinstance(geometries, list):
             self.__geometries = geometries
 
@@ -147,8 +148,8 @@ class SentinelDownloader(object):
         """
         print('===========================================================')
         print('Search data for platform %s' % platform)
-        if platform != 'S1A*' and platform != 'S2A*':
-            raise Exception('platform parameter has to be S1A or S2A')
+        if platform not in ['S1A*', 'S1B*', 'S2A*', 'S2B*', 'S3A*', 'S3B*']:
+            raise Exception('platform parameter has to be S1A*, S1B*, S2A*, S2B*, S3A* or S3B*')
 
         if download_dir is not None:
             self.set_download_dir(download_dir)
@@ -161,21 +162,34 @@ class SentinelDownloader(object):
                 end_date = datetime.now()
             if date_type not in ['beginPosition', 'endPosition', 'ingestionDate']:
                 raise Exception('dateType parameter must be one of beginPosition, endPosition, ingestionDate')
-            if isinstance(start_date, datetime) or isinstance(start_date, date):
-                start_date = start_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+            if isinstance(start_date, (datetime, date)):
+                start_date = start_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             else:
-                start_date = datetime.strptime(start_date, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%SZ')
-            if isinstance(end_date, datetime) or isinstance(end_date, date):
-                end_date = end_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+                start_date = datetime.strptime(start_date, '%Y-%m-%d')\
+                    .strftime('%Y-%m-%dT%H:%M:%S.%fZ')
+            if isinstance(end_date, (datetime, date)):
+                end_date = end_date.strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             else:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d').strftime('%Y-%m-%dT%H:%M:%SZ')
+                end_date = datetime.strptime(end_date + ' 23:59:59.999', '%Y-%m-%d %H:%M:%S.%f')\
+                    .strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             date_filtering = ' AND %s:[%s TO %s]' % (date_type, start_date, end_date)
 
         for geom in self.__geometries:
             print('===========================================================')
-            url = self._format_url(geom, platform, date_filtering, **keywords)
-            print('Search URL: %s' % url)
-            scenes = self._search_request(url)
+
+            index = 0
+            scenes = []
+            while True:
+                url = self._format_url(index, geom, platform, date_filtering, **keywords)
+                print('Search URL: %s' % url)
+                subscenes = self._search_request(url)
+                if len(subscenes) > 0:
+                    print('found %s scenes on page %s' % (len(subscenes), index//100+1))
+                    scenes += subscenes
+                    index += 100
+                if len(subscenes) < 100:
+                    break
+
             print '%s scenes after initial search' % len(scenes)
             if len(scenes) > 0:
                 scenes = self._filter_existing(scenes, self.__download_dir)
@@ -241,10 +255,19 @@ class SentinelDownloader(object):
             print('===========================================================')
             print('Download file path: %s' % path)
 
-            response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True, verify=False)
+            try:
+                response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True)
+            except requests.exceptions.ConnectionError:
+                print 'Connection Error'
+                continue
+            if 'Content-Length' not in response.headers:
+                print 'Content-Length not found'
+                print url
+                continue
             size = int(response.headers['Content-Length'].strip())
             if size < 1000000:
-                print 'The found scene: %s is to small' % scene['title']
+                print 'The found scene: %s is to small (%s)' % (scene['title'], size)
+                print url
                 continue
 
             print('Size of the scene: %s MB' % (size / 1024 / 1024))  # show in MegaBytes
@@ -265,32 +288,49 @@ class SentinelDownloader(object):
                 down.close()
             except KeyboardInterrupt:
                 print("\nKeyboard interruption, remove current download and exit execution of script")
-                down.close()
                 os.remove(path)
                 sys.exit(0)
 
             # Check if file is valid
-            failed = False
-            is_zip = zipfile.is_zipfile(path)
-            if is_zip:
-                if not os.path.getsize(path) > 1000000:
-                    print('The found scene: %s is to small' % scene['title'])
-                    failed = True
-            else:
-                print('The downloaded scene: %s is not a valid zip ' % scene['title'])
-                failed = True
+            print "Check if file is valid: "
+            valid = self._is_valid(path)
 
-            if failed:
+            if not valid:
                 downloaded_failed.append(path)
-                print('Invalid file will be deleted')
+                print('Invalid file is being deleted.')
                 os.remove(path)
             else:
-                print('File seems to be valid!')
                 downloaded.append(path)
 
         return {'success': downloaded, 'failed': downloaded_failed}
 
-    def _format_url(self, wkt_geometry, platform, date_filtering, **keywords):
+    def _is_valid(self, zipfile, minsize=1000000):
+        """
+        Test whether the downloaded zipfile is valid
+        Args:
+            zipfile: the file to be tested
+            minsize: the minimum accepted file size
+
+        Returns: True if the file is valid and False otherwise
+
+        """
+        if not os.path.getsize(zipfile) > minsize:
+            print('The downloaded scene is too small: {}'.format(os.path.basename(zipfile)))
+            return False
+        archive = zf.ZipFile(zipfile, 'r')
+        try:
+            corrupt = archive.testzip()
+        except zlib.error:
+            corrupt = zipfile
+        archive.close()
+        if corrupt:
+            print('The downloaded scene is corrupt: {}'.format(os.path.basename(zipfile)))
+            return False
+        else:
+            print('File seems to be valid.')
+            return True
+
+    def _format_url(self, startindex, wkt_geometry, platform, date_filtering, **keywords):
         """Format the search URL based on the arguments
 
         Args:
@@ -312,8 +352,8 @@ class SentinelDownloader(object):
             filters += ' AND (%s:%s)' % (kw, keywords[kw])
 
         url = os.path.join(self.__esa_api_url,
-                           'search?format=json&rows=100000&q=%s%s%s%s' %
-                           (platform, date_filtering, query_area, filters))
+                           'search?format=json&rows=100&start=%s&q=%s%s%s%s' %
+                           (startindex, platform, date_filtering, query_area, filters))
         return url
 
     def _search_request(self, url):
@@ -327,7 +367,7 @@ class SentinelDownloader(object):
 
         """
         try:
-            content = requests.get(url, auth=(self.__esa_username, self.__esa_password), verify=False)
+            content = requests.get(url, auth=(self.__esa_username, self.__esa_password), verify=True)
             if not content.status_code // 100 == 2:
                 print('Error: API returned unexpected response {}:'.format(content.status_code))
                 print(content.text)
@@ -353,8 +393,8 @@ class SentinelDownloader(object):
             return []
 
         scenes = obj['feed']['entry']
-        if int(obj['feed']['opensearch:totalResults']) == 1:
-            scenes = [scenes]
+        if not isinstance(scenes, list):
+             scenes = [scenes]
         scenes_dict = []
         for scene in scenes:
             item = {
@@ -413,7 +453,6 @@ class SentinelDownloader(object):
             footprint = loads(scene['footprint'])
             intersect = site.intersection(footprint)
             overlap = intersect.area / site.area
-            # print str(overlap)
             if overlap > min_overlap or (
                     site.area / footprint.area > 1 and intersect.area / footprint.area > min_overlap):
                 scene['_script_overlap'] = overlap * 100
@@ -490,18 +529,15 @@ class SentinelDownloader(object):
 def main(username, password):
     """Example use of class:
     Note: please set your own username and password of ESA Data Hub
-
     Args:
         username: Your username of ESA Data Hub
         password: Your password of ESA Data Hub
-
     s1 = SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
     s1.set_geometries('POLYGON ((13.501756184061247 58.390759025092443,13.617310497771715 58.371827474899703,13.620921570075168 58.27891592167088,13.508978328668151 58.233319081414017,13.382590798047325 58.263723491583974,13.382590798047325 58.263723491583974,13.501756184061247 58.390759025092443))')
     s1.set_download_dir('./') # default is current directory
     s1.search('S1A*', 0.8, productType='GRD', sensoroperationalmode='IW')
     s1.write_results(type='wget', file='test.sh.neu')  # use wget, urls or json as type
     s1.download_all()
-
     """
 
     s1 = SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
