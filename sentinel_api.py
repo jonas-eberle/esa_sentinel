@@ -146,7 +146,7 @@ class SentinelDownloader(object):
             dataType: Define the type of the given dates (please select from 'beginPosition', 'endPosition', and
                 'ingestionDate') (Default: beginPosition)
             **keywords: Further OpenSearch arguments can be passed to the query according to the ESA Data Hub Handbook
-                (please see https://scihub.esa.int/twiki/do/view/SciHubUserGuide/3FullTextSearch#Search_Keywords)
+                (please see https://scihub.copernicus.eu/twiki/do/view/SciHubUserGuide/3FullTextSearch#Search_Keywords)
 
         Mandatory args:
             platform
@@ -549,10 +549,10 @@ def main(username, password):
         password: Your password of ESA Data Hub
 
     api_hub options:
-    'https://scihub.esa.int/apihub/' for fast access to recently acquired imagery in the API HUB rolling archive
+    'https://scihub.copernicus.eu/apihub/' for fast access to recently acquired imagery in the API HUB rolling archive
     'https://scihub.copernicus.eu/dhus/' for slower access to the full archive of all acquired imagery
 
-    s1 = SentinelDownloader(username, password, api_url='https://scihub.esa.int/apihub/')
+    s1 = SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
     s1.set_geometries('POLYGON ((13.501756184061247 58.390759025092443,13.617310497771715 58.371827474899703,13.620921570075168 58.27891592167088,13.508978328668151 58.233319081414017,13.382590798047325 58.263723491583974,13.382590798047325 58.263723491583974,13.501756184061247 58.390759025092443))')
     s1.set_download_dir('./') # default is current directory
     s1.search('S1A*', 0.8, productType='GRD', sensoroperationalmode='IW')
