@@ -2,6 +2,7 @@ from setuptools import setup, find_packages
 
 setup(name='sentinel_api',
       packages=find_packages(),
+      include_package_data=True,
       version='0.5.2',
       description='ESA Sentinel Search & Download API',
       classifiers=[
