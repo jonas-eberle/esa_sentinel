@@ -63,6 +63,8 @@ s1.download_all()
 Help
 -----------
 For now, please see the docstrings for each method within the code or within python
- 
-    import sentinel_api as api
-    help(api)
+
+```Python
+import sentinel_api as api
+help(api)
+```
