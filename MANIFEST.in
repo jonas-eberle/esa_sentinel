@@ -1,1 +1,1 @@
-recursive-include sentinel_api/examples *.py
+include sentinel_api/examples/*
