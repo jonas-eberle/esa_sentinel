@@ -147,6 +147,9 @@ class SentinelDownloader(object):
                 'ingestionDate') (Default: beginPosition)
             **keywords: Further OpenSearch arguments can be passed to the query according to the ESA Data Hub Handbook
                 (please see https://scihub.copernicus.eu/twiki/do/view/SciHubUserGuide/3FullTextSearch#Search_Keywords)
+                missing under this link:
+                - slicenumber: the graticule along an orbit; particularly important for interferometric applications
+                    to identify overlapping scene pairs
 
         Mandatory args:
             platform
@@ -200,15 +203,15 @@ class SentinelDownloader(object):
                 if len(subscenes) < 100:
                     break
 
-            print '%s scenes after initial search' % len(scenes)
+            print('%s scenes after initial search' % len(scenes))
             if len(scenes) > 0:
                 scenes = self._filter_existing(scenes)
                 scenes = self._filter_overlap(scenes, geom, min_overlap)
-                print '%s scenes after filtering before merging' % len(scenes)
+                print('%s scenes after filtering before merging' % len(scenes))
                 self.__scenes = self._merge_scenes(self.__scenes, scenes)
 
         print('===========================================================')
-        print '%s total scenes after merging' % len(self.__scenes)
+        print('%s total scenes after merging' % len(self.__scenes))
         print('===========================================================')
 
     def get_scenes(self):
@@ -221,7 +224,7 @@ class SentinelDownloader(object):
         def sorter(x): return re.findall('[0-9T]{15}', x)[0]
 
         titles = sorted([x['title'] for x in self.__scenes], key=sorter)
-        print '\n'.join(titles)
+        print('\n'.join(titles))
 
     def write_results(self, file_type, filename, output=False):
         """Write results to disk in different kind of formats
@@ -271,16 +274,16 @@ class SentinelDownloader(object):
             try:
                 response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True)
             except requests.exceptions.ConnectionError:
-                print 'Connection Error'
+                print('Connection Error')
                 continue
             if 'Content-Length' not in response.headers:
-                print 'Content-Length not found'
-                print url
+                print('Content-Length not found')
+                print(url)
                 continue
             size = int(response.headers['Content-Length'].strip())
             if size < 1000000:
-                print 'The found scene is to small: %s (%s)' % (scene['title'], size)
-                print url
+                print('The found scene is to small: %s (%s)' % (scene['title'], size))
+                print(url)
                 continue
 
             print('Size of the scene: %s MB' % (size / 1024 / 1024))  # show in MegaBytes
@@ -305,7 +308,7 @@ class SentinelDownloader(object):
                 sys.exit(0)
 
             # Check if file is valid
-            print "Check if file is valid: "
+            print("Check if file is valid: ")
             valid = self._is_valid(path)
 
             if not valid:
