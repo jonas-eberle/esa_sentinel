@@ -1,4 +1,0 @@
-GDAL==1.11.3
-Shapely==1.5.13
-progressbar==2.3
-requests==2.8.1
