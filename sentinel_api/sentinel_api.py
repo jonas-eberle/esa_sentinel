@@ -333,18 +333,20 @@ class SentinelDownloader(object):
         if not os.path.getsize(zipfile) > minsize:
             print('The downloaded scene is too small: {}'.format(os.path.basename(zipfile)))
             return False
-        archive = zf.ZipFile(zipfile, 'r')
         try:
-            corrupt = archive.testzip()
-        except zlib.error:
-            corrupt = zipfile
-        archive.close()
+            archive = zf.ZipFile(zipfile, 'r')
+            try:
+                corrupt = True if archive.testzip() else False
+            except zlib.error:
+                corrupt = True
+            archive.close()
+        except zf.BadZipfile:
+            corrupt = True
         if corrupt:
             print('The downloaded scene is corrupt: {}'.format(os.path.basename(zipfile)))
-            return False
         else:
             print('file seems to be valid.')
-            return True
+        return not corrupt
 
     def _format_url(self, startindex, wkt_geometry, platform, date_filtering, **keywords):
         """Format the search URL based on the arguments
