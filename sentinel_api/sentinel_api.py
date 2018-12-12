@@ -91,7 +91,7 @@ class SentinelDownloader(object):
         # Test first geometry
         try:
             loads(self.__geometries[0])
-        except Exception, e:
+        except Exception as e:
             raise Exception('The first geometry is not valid! Error: %s' % e)
 
     def get_geometries(self):
