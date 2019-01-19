@@ -282,7 +282,7 @@ class SentinelDownloader(object):
                 continue
             size = int(response.headers['Content-Length'].strip())
             if size < 1000000:
-                print('The found scene is to small: %s (%s)' % (scene['title'], size))
+                print('The found scene is too small: %s (%s)' % (scene['title'], size))
                 print(url)
                 continue
 
