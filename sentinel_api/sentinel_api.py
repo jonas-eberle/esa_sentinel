@@ -232,7 +232,7 @@ class SentinelDownloader(object):
         Args:
             file_type: Use 'wget' to write download bash file with wget software, 'json' to write the dictionary object
                 to file, or 'url' to write a file with downloadable URLs
-            path: Path to file
+            filename: Path to file
             output: If True the written file will also be send to stdout (Default: False)
 
         """
@@ -504,26 +504,26 @@ class SentinelDownloader(object):
 
         return scenes1
 
-    def _write_json(self, path):
+    def _write_json(self, filename):
         """Write JSON representation of scenes list to file
 
         Args:
-            file: Path to file to write in
+            filename: Path to file to write in
 
         """
-        with open(path, 'w') as outfile:
+        with open(filename, 'w') as outfile:
             json.dump(self.__scenes, outfile)
         return True
 
-    def _write_download_wget(self, path):
+    def _write_download_wget(self, filename):
         """Write bash file to download scene URLs based on wget software
         Please note: User authentication to ESA Data Hub (username, password) is being stored in plain text!
 
         Args:
-            file: Path to file to write in
+            filename: Path to file to write in
 
         """
-        with open(path, 'w') as outfile:
+        with open(filename, 'w') as outfile:
             for scene in self.__scenes:
                 outfile.write('wget -c -T120 --no-check-certificate --user=%s --password=%s -O %s%s.zip "%s"\n' % (
                     self.__esa_username, self.__esa_password, self.__download_dir, scene['title'],
@@ -531,17 +531,17 @@ class SentinelDownloader(object):
                 ))
         return None
 
-    def _write_download_urls(self, path):
+    def _write_download_urls(self, filename):
         """Write URLs of scenes to text file
 
         Args:
-            file: Path to file to write in
+            filename: Path to file to write in
 
         """
-        with open(path, 'w') as outfile:
+        with open(filename, 'w') as outfile:
             for scene in self.__scenes:
                 outfile.write(scene['url'] + '\n')
-        return path
+        return filename
 
 
 ###########################################################
