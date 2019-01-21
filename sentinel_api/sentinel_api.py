@@ -527,11 +527,11 @@ class SentinelDownloader(object):
         """
         with open(filename, 'w') as outfile:
             for scene in self.__scenes:
-                outfile.write('wget -c -T120 --no-check-certificate --user=%s --password=%s -O %s%s.zip "%s"\n' % (
-                    self.__esa_username, self.__esa_password, self.__download_dir, scene['title'],
-                    scene['url'].replace('$', '\$')
-                ))
-        return None
+                out = 'wget -c -T120 --no-check-certificate --user="{}" --password="{}" -O {}.zip "{}"\n'\
+                    .format(self.__esa_username, self.__esa_password,
+                            os.path.join(self.__download_dir, scene['title']), scene['url'].replace('$', '\$'))
+                
+                outfile.write(out)
     
     def _write_download_urls(self, filename):
         """Write URLs of scenes to text file
