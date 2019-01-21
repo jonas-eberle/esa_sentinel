@@ -22,6 +22,8 @@ import sys
 import requests
 
 from shapely.wkt import loads
+from shapely.errors import WKTReadingError
+
 from osgeo import ogr, osr
 import json
 import progressbar as pb
@@ -31,21 +33,21 @@ from datetime import datetime, date
 
 class SentinelDownloader(object):
     """Class to search and download for Sentinel data"""
-
+    
     __esa_username = None
     __esa_password = None
     __esa_api_url = None
-
+    
     __geometries = []
     __scenes = []
     __download_dir = './'
     __data_dirs = []
-
+    
     def __init__(self, username, password, api_url='https://scihub.copernicus.eu/apihub/'):
         self.__esa_api_url = api_url
         self.__esa_username = username
         self.__esa_password = password
-
+    
     def set_download_dir(self, download_dir):
         """Set directory for check against existing downloaded files and as directory where to download
 
@@ -56,9 +58,9 @@ class SentinelDownloader(object):
         print('Setting download directory to %s' % download_dir)
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
-
+        
         self.__download_dir = download_dir
-
+    
     def set_data_dir(self, data_dir):
         """Set directory for check against existing downloaded files; this can be repeated multiple times to create a list of data directories
 
@@ -68,7 +70,7 @@ class SentinelDownloader(object):
         """
         print('Adding data directory {}'.format(data_dir))
         self.__data_dirs.append(data_dir)
-
+    
     def set_geometries(self, geometries):
         """Manually set one or more geometries for data search
 
@@ -81,23 +83,23 @@ class SentinelDownloader(object):
         # print(geometries)
         if isinstance(geometries, list):
             self.__geometries = geometries
-
+        
         elif isinstance(geometries, str):
             self.__geometries = [geometries]
-
+        
         else:
             raise Exception('geometries parameter needs to be a list or a string')
-
+        
         # Test first geometry
         try:
             loads(self.__geometries[0])
-        except Exception, e:
+        except (AttributeError, WKTReadingError) as e:
             raise Exception('The first geometry is not valid! Error: %s' % e)
-
+    
     def get_geometries(self):
         """Return list of geometries"""
         return self.__geometries
-
+    
     def load_sites(self, input_file, verbose=False):
         """Load features from input file and transform geometries to Lat/Lon (EPSG 4326)
 
@@ -108,20 +110,20 @@ class SentinelDownloader(object):
         """
         print('===========================================================')
         print('Loading sites from file %s' % input_file)
-
+        
         if not os.path.exists(input_file):
             raise Exception('Input file does not exist: %s' % input_file)
-
+        
         source = ogr.Open(input_file, 0)
         layer = source.GetLayer()
-
+        
         in_ref = layer.GetSpatialRef()
         out_ref = osr.SpatialReference()
         out_ref.ImportFromEPSG(4326)
-
+        
         coord_transform = osr.CoordinateTransformation(in_ref, out_ref)
         geometries = []
-
+        
         for feature in layer:
             geom = feature.GetGeometryRef()
             geom.Transform(coord_transform)
@@ -129,10 +131,10 @@ class SentinelDownloader(object):
             if verbose:
                 print(geom)
             geometries.append(geom)
-
+        
         self.__geometries = geometries
         print('Found %s features' % len(geometries))
-
+    
     def search(self, platform, min_overlap=0, download_dir=None, start_date=None, end_date=None,
                date_type='beginPosition', **keywords):
         """Search in ESA Data Hub for scenes with given arguments
@@ -162,10 +164,10 @@ class SentinelDownloader(object):
         print('Searching data for platform %s' % platform)
         if platform not in ['S1A*', 'S1B*', 'S2A*', 'S2B*', 'S3A*', 'S3B*']:
             raise Exception('platform parameter has to be S1A*, S1B*, S2A*, S2B*, S3A* or S3B*')
-
+        
         if download_dir is not None:
             self.set_download_dir(download_dir)
-
+        
         date_filtering = ''
         if start_date is not None or end_date is not None:
             if start_date is None:
@@ -185,10 +187,10 @@ class SentinelDownloader(object):
                 end_date = datetime.strptime(end_date + ' 23:59:59.999', '%Y-%m-%d %H:%M:%S.%f') \
                     .strftime('%Y-%m-%dT%H:%M:%S.%fZ')
             date_filtering = ' AND %s:[%s TO %s]' % (date_type, start_date, end_date)
-
+        
         for geom in self.__geometries:
             print('===========================================================')
-
+            
             index = 0
             scenes = []
             while True:
@@ -202,30 +204,30 @@ class SentinelDownloader(object):
                     print('=============================')
                 if len(subscenes) < 100:
                     break
-
+            
             print('%s scenes after initial search' % len(scenes))
             if len(scenes) > 0:
                 scenes = self._filter_existing(scenes)
                 scenes = self._filter_overlap(scenes, geom, min_overlap)
                 print('%s scenes after filtering before merging' % len(scenes))
                 self.__scenes = self._merge_scenes(self.__scenes, scenes)
-
+        
         print('===========================================================')
         print('%s total scenes after merging' % len(self.__scenes))
         print('===========================================================')
-
+    
     def get_scenes(self):
         """Return searched and filtered scenes"""
         return self.__scenes
-
+    
     def print_scenes(self):
         """Print title of searched and filtered scenes"""
-
+        
         def sorter(x): return re.findall('[0-9T]{15}', x)[0]
-
+        
         titles = sorted([x['title'] for x in self.__scenes], key=sorter)
         print('\n'.join(titles))
-
+    
     def write_results(self, file_type, filename, output=False):
         """Write results to disk in different kind of formats
 
@@ -242,11 +244,11 @@ class SentinelDownloader(object):
             self._write_json(filename)
         else:
             self._write_download_urls(filename)
-
+        
         if output:
             with open(filename, 'r') as infile:
                 print(infile.read())
-
+    
     def download_all(self, download_dir=None):
         """Download all scenes
 
@@ -260,17 +262,17 @@ class SentinelDownloader(object):
         """
         if download_dir is None:
             download_dir = self.__download_dir
-
+        
         downloaded = []
         downloaded_failed = []
-
+        
         for scene in self.__scenes:
             url = scene['url']
             filename = scene['title'] + '.zip'
             path = os.path.join(download_dir, filename)
             print('===========================================================')
             print('Download file path: %s' % path)
-
+            
             try:
                 response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True)
             except requests.exceptions.ConnectionError:
@@ -285,14 +287,14 @@ class SentinelDownloader(object):
                 print('The found scene is to small: %s (%s)' % (scene['title'], size))
                 print(url)
                 continue
-
+            
             print('Size of the scene: %s MB' % (size / 1024 / 1024))  # show in MegaBytes
             my_bytes = 0
             widgets = ["Downloading: ", pb.Bar(marker="*", left="[", right=" "),
                        pb.Percentage(), " ", pb.FileTransferSpeed(), "] ",
                        " of {0}MB".format(str(round(size / 1024 / 1024, 2))[:4])]
             pbar = pb.ProgressBar(widgets=widgets, maxval=size).start()
-
+            
             try:
                 down = open(path, 'wb')
                 for buf in response.iter_content(1024):
@@ -306,20 +308,20 @@ class SentinelDownloader(object):
                 print("\nKeyboard interruption, remove current download and exit execution of script")
                 os.remove(path)
                 sys.exit(0)
-
+            
             # Check if file is valid
             print("Check if file is valid: ")
             valid = self._is_valid(path)
-
+            
             if not valid:
                 downloaded_failed.append(path)
                 print('invalid file is being deleted.')
                 os.remove(path)
             else:
                 downloaded.append(path)
-
+        
         return {'success': downloaded, 'failed': downloaded_failed}
-
+    
     @staticmethod
     def _is_valid(zipfile, minsize=1000000):
         """
@@ -348,7 +350,7 @@ class SentinelDownloader(object):
         else:
             print('file seems to be valid.')
         return not corrupt
-
+    
     def _format_url(self, startindex, wkt_geometry, platform, date_filtering, **keywords):
         """Format the search URL based on the arguments
 
@@ -364,17 +366,17 @@ class SentinelDownloader(object):
         """
         geom = loads(wkt_geometry)
         bbox = geom.envelope
-
+        
         query_area = ' AND (footprint:"Intersects(%s)")' % bbox
         filters = ''
         for kw in sorted(keywords.keys()):
             filters += ' AND (%s:%s)' % (kw, keywords[kw])
-
+        
         url = os.path.join(self.__esa_api_url,
                            'search?format=json&rows=100&start=%s&q=%s%s%s%s' %
                            (startindex, platform, date_filtering, query_area, filters))
         return url
-
+    
     def _search_request(self, url):
         """Do the HTTP request to ESA Data Hub
 
@@ -392,11 +394,11 @@ class SentinelDownloader(object):
                 print(content.text)
                 return []
             return self._parse_json(content.json())
-
+        
         except requests.exceptions.RequestException as exc:
             print('Error: {}'.format(exc))
             return []
-
+    
     @staticmethod
     def _parse_json(obj):
         """Parse the JSON result from ESA Data Hub and create a dictionary for each scene
@@ -411,7 +413,7 @@ class SentinelDownloader(object):
         if 'entry' not in obj['feed']:
             print('No results for this feed')
             return []
-
+        
         scenes = obj['feed']['entry']
         if not isinstance(scenes, list):
             scenes = [scenes]
@@ -422,20 +424,20 @@ class SentinelDownloader(object):
                 'title': scene['title'],
                 'url': scene['link'][0]['href']
             }
-
+            
             for data in scene['str']:
                 item[data['name']] = data['content']
-
+            
             for data in scene['date']:
                 item[data['name']] = data['content']
-
+            
             for data in scene['int']:
                 item[data['name']] = data['content']
-
+            
             scenes_dict.append(item)
-
+        
         return scenes_dict
-
+    
     def _filter_existing(self, scenes):
         """Filter scenes based on existing files in the define download directory and all further data directories
 
@@ -453,7 +455,7 @@ class SentinelDownloader(object):
             if not any(exist):
                 filtered.append(scene)
         return filtered
-
+    
     @staticmethod
     def _filter_overlap(scenes, wkt_geometry, min_overlap=0):
         """Filter scenes based on the minimum overlap to the area of interest
@@ -468,20 +470,20 @@ class SentinelDownloader(object):
 
         """
         site = loads(wkt_geometry)
-
+        
         filtered = []
-
+        
         for scene in scenes:
             footprint = loads(scene['footprint'])
             intersect = site.intersection(footprint)
             overlap = intersect.area / site.area
             if overlap > min_overlap or (
-                                site.area / footprint.area > 1 and intersect.area / footprint.area > min_overlap):
+                    site.area / footprint.area > 1 and intersect.area / footprint.area > min_overlap):
                 scene['_script_overlap'] = overlap * 100
                 filtered.append(scene)
-
+        
         return filtered
-
+    
     @staticmethod
     def _merge_scenes(scenes1, scenes2):
         """Merge scenes from two different lists using the 'id' keyword
@@ -497,13 +499,13 @@ class SentinelDownloader(object):
         existing_ids = []
         for scene in scenes1:
             existing_ids.append(scene['id'])
-
+        
         for scene in scenes2:
             if not scene['id'] in existing_ids:
                 scenes1.append(scene)
-
+        
         return scenes1
-
+    
     def _write_json(self, filename):
         """Write JSON representation of scenes list to file
 
@@ -514,7 +516,7 @@ class SentinelDownloader(object):
         with open(filename, 'w') as outfile:
             json.dump(self.__scenes, outfile)
         return True
-
+    
     def _write_download_wget(self, filename):
         """Write bash file to download scene URLs based on wget software
         Please note: User authentication to ESA Data Hub (username, password) is being stored in plain text!
@@ -530,7 +532,7 @@ class SentinelDownloader(object):
                     scene['url'].replace('$', '\$')
                 ))
         return None
-
+    
     def _write_download_urls(self, filename):
         """Write URLs of scenes to text file
 
@@ -569,20 +571,20 @@ def main(username, password):
     s1.download_all()
 
     """
-
+    
     s1 = SentinelDownloader(username, password, api_url='https://scihub.copernicus.eu/apihub/')
     # s1.load_sites('wetlands_v8.shp')
     s1.set_geometries(
         'POLYGON ((13.501756184061247 58.390759025092443,13.617310497771715 58.371827474899703,13.620921570075168 58.27891592167088,13.508978328668151 58.233319081414017,13.382590798047325 58.263723491583974,13.382590798047325 58.263723491583974,13.501756184061247 58.390759025092443))')
     s1.set_download_dir('./')  # default is current directory
-
+    
     # set additional directories which contain downloaded scenes.
     # A scene is only going to be downloaded if it does not yet exist in either of the data directories or the download directory.
     s1.set_data_dir('/path/to/datadir1')
     s1.set_data_dir('/path/to/datadir2')
-
+    
     s1.search('S1A*', 0.8, productType='GRD', sensoroperationalmode='IW')
     s1.write_results(file_type='wget', filename='sentinel_api_download.sh')  # use wget, urls or json as type
     s1.download_all()
-
+    
     return s1
