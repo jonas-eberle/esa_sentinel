@@ -320,7 +320,8 @@ class SentinelDownloader(object):
 
         return {'success': downloaded, 'failed': downloaded_failed}
 
-    def _is_valid(self, zipfile, minsize=1000000):
+    @staticmethod
+    def _is_valid(zipfile, minsize=1000000):
         """
         Test whether the downloaded zipfile is valid
         Args:
@@ -396,7 +397,8 @@ class SentinelDownloader(object):
             print('Error: {}'.format(exc))
             return []
 
-    def _parse_json(self, obj):
+    @staticmethod
+    def _parse_json(obj):
         """Parse the JSON result from ESA Data Hub and create a dictionary for each scene
 
         Args:
@@ -452,7 +454,8 @@ class SentinelDownloader(object):
                 filtered.append(scene)
         return filtered
 
-    def _filter_overlap(self, scenes, wkt_geometry, min_overlap=0):
+    @staticmethod
+    def _filter_overlap(scenes, wkt_geometry, min_overlap=0):
         """Filter scenes based on the minimum overlap to the area of interest
 
         Args:
@@ -479,7 +482,8 @@ class SentinelDownloader(object):
 
         return filtered
 
-    def _merge_scenes(self, scenes1, scenes2):
+    @staticmethod
+    def _merge_scenes(scenes1, scenes2):
         """Merge scenes from two different lists using the 'id' keyword
 
         Args:
