@@ -2,7 +2,6 @@
 Sentinel Search & Download API
 Authors: Jonas Eberle <jonas.eberle@uni-jena.de>, Felix Cremer <felix.cremer@uni-jena.de>, John Truckenbrodt <john.truckenbrodt@uni-jena.de>
 
-Libraries needed: Shapely, GDAL/OGR, JSON, Progressbar, Zipfile, Datetime, Requests
 Example usage: Please see the "main" function at the end of this file
 
 TODO:
@@ -21,10 +20,11 @@ import zlib
 import sys
 import requests
 
-from shapely.wkt import loads
-from shapely.errors import WKTReadingError
+from osgeo import ogr
+ogr.UseExceptions()
 
-from osgeo import ogr, osr
+from spatialist.vector import Vector, wkt2vector, intersect
+
 import json
 import progressbar as pb
 import zipfile as zf
@@ -92,48 +92,32 @@ class SentinelDownloader(object):
         
         # Test first geometry
         try:
-            loads(self.__geometries[0])
-        except (AttributeError, WKTReadingError) as e:
+            vec = wkt2vector(self.__geometries[0], srs=4326)
+        except RuntimeError as e:
             raise Exception('The first geometry is not valid! Error: %s' % e)
+        finally:
+            vec = None
     
     def get_geometries(self):
         """Return list of geometries"""
         return self.__geometries
     
-    def load_sites(self, input_file, verbose=False):
-        """Load features from input file and transform geometries to Lat/Lon (EPSG 4326)
+    def load_sites(self, input_file):
+        """
+        Load features from input file and transform geometries to Lat/Lon (EPSG 4326)
 
         Args:
             input_file: Path to file that can be read by OGR library
-            verbose: True if extracted geometries should be printed to console (default: False)
 
         """
         print('===========================================================')
         print('Loading sites from file %s' % input_file)
         
-        if not os.path.exists(input_file):
-            raise Exception('Input file does not exist: %s' % input_file)
+        with Vector(input_file) as vec:
+            vec.reproject(4326)
+            self.__geometries = vec.convert2wkt()
         
-        source = ogr.Open(input_file, 0)
-        layer = source.GetLayer()
-        
-        in_ref = layer.GetSpatialRef()
-        out_ref = osr.SpatialReference()
-        out_ref.ImportFromEPSG(4326)
-        
-        coord_transform = osr.CoordinateTransformation(in_ref, out_ref)
-        geometries = []
-        
-        for feature in layer:
-            geom = feature.GetGeometryRef()
-            geom.Transform(coord_transform)
-            geom = geom.ExportToWkt()
-            if verbose:
-                print(geom)
-            geometries.append(geom)
-        
-        self.__geometries = geometries
-        print('Found %s features' % len(geometries))
+        print('Found %s features' % len(self.__geometries))
     
     def search(self, platform, min_overlap=0, download_dir=None, start_date=None, end_date=None,
                date_type='beginPosition', **keywords):
@@ -143,9 +127,9 @@ class SentinelDownloader(object):
             platform: Define which data to search for (either 'S1A*' for Sentinel-1A or 'S2A*' for Sentinel-2A)
             min_overlap: Define minimum overlap (0-1) between area of interest and scene footprint (Default: 0)
             download_dir: Define download directory to filter prior downloaded scenes (Default: None)
-            startDate: Define starting date of search (Default: None, all data)
-            endDate: Define ending date of search (Default: None, all data)
-            dataType: Define the type of the given dates (please select from 'beginPosition', 'endPosition', and
+            start_date: Define starting date of search (Default: None, all data)
+            end_date: Define ending date of search (Default: None, all data)
+            date_type: Define the type of the given dates (please select from 'beginPosition', 'endPosition', and
                 'ingestionDate') (Default: beginPosition)
             **keywords: Further OpenSearch arguments can be passed to the query according to the ESA Data Hub Handbook
                 (please see https://scihub.copernicus.eu/twiki/do/view/SciHubUserGuide/3FullTextSearch#Search_Keywords)
@@ -364,9 +348,9 @@ class SentinelDownloader(object):
             url: String URL to search for this data
 
         """
-        geom = loads(wkt_geometry)
-        bbox = geom.envelope
-        
+        with wkt2vector(wkt_geometry, srs=4326) as vec:
+            bbox = vec.bbox().convert2wkt()[0]
+            
         query_area = ' AND (footprint:"Intersects(%s)")' % bbox
         filters = ''
         for kw in sorted(keywords.keys()):
@@ -376,6 +360,14 @@ class SentinelDownloader(object):
                            'search?format=json&rows=100&start=%s&q=%s%s%s%s' %
                            (startindex, platform, date_filtering, query_area, filters))
         return url
+    
+    @staticmethod
+    def multipolygon2list(wkt):
+        geom = ogr.CreateGeometryFromWkt(wkt)
+        if geom.GetGeometryName() == 'MULTIPOLYGON':
+            return [x.ExportToWkt() for x in geom]
+        else:
+            return [geom.ExportToWkt()]
     
     def _search_request(self, url):
         """Do the HTTP request to ESA Data Hub
@@ -393,7 +385,10 @@ class SentinelDownloader(object):
                 print('Error: API returned unexpected response {}:'.format(content.status_code))
                 print(content.text)
                 return []
-            return self._parse_json(content.json())
+            result = self._parse_json(content.json())
+            for item in result:
+                item['footprint'] = self.multipolygon2list(item['footprint'])[0]
+            return result
         
         except requests.exceptions.RequestException as exc:
             print('Error: {}'.format(exc))
@@ -469,20 +464,22 @@ class SentinelDownloader(object):
             Filtered list of scenes
 
         """
-        site = loads(wkt_geometry)
-        
         filtered = []
         
-        for scene in scenes:
-            footprint = loads(scene['footprint'])
-            intersect = site.intersection(footprint)
-            overlap = intersect.area / site.area
-            if overlap > min_overlap or (
-                    site.area / footprint.area > 1 and intersect.area / footprint.area > min_overlap):
-                scene['_script_overlap'] = overlap * 100
-                filtered.append(scene)
-        
-        return filtered
+        with wkt2vector(wkt_geometry, srs=4326) as vec1:
+            site_area = vec1.getArea()
+            for scene in scenes:
+                with wkt2vector(scene['footprint'], srs=4326) as vec2:
+                    footprint_area = vec2.getArea()
+                    with intersect(vec1, vec2) as inter:
+                        intersect_area = inter.getArea()
+                overlap = intersect_area / site_area
+                if overlap > min_overlap or (
+                        site_area / footprint_area > 1 and intersect_area / footprint_area > min_overlap):
+                    scene['_script_overlap'] = overlap * 100
+                    filtered.append(scene)
+
+            return filtered
     
     @staticmethod
     def _merge_scenes(scenes1, scenes2):
