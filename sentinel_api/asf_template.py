@@ -80,9 +80,7 @@ def signal_handler(sig, frame):
 class bulk_downloader:
     def __init__(self):
         # List of files to download
-        self.files = [
-            "https://datapool.asf.alaska.edu/GRD_HD/SB/S1B_IW_GRDH_1SDV_20190807T045445_20190807T045510_017475_020DCD_A6EF.zip",
-            "https://datapool.asf.alaska.edu/GRD_HD/SB/S1B_IW_GRDH_1SDV_20190807T043950_20190807T044019_017475_020DCA_CE96.zip"]
+        self.files = ['placeholder_files']
         
         # Local stash of cookies so we don't always have to ask
         self.cookie_jar_path = os.path.join(os.path.expanduser('~'), ".bulk_download_cookiejar.txt")
