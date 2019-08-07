@@ -541,7 +541,42 @@ class SentinelDownloader(object):
             for scene in self.__scenes:
                 outfile.write(scene['url'] + '\n')
         return filename
-
+    
+    def _write_download_asf(self, filename):
+        template = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'asf_template.py')
+    
+        with open(template, 'r') as temp:
+            content = temp.read()
+            pattern = r'^(?P<sensor>S1[AB])_' \
+                      r'(?P<beam>S1|S2|S3|S4|S5|S6|IW|EW|WV|EN|N1|N2|N3|N4|N5|N6|IM)_' \
+                      r'(?P<product>SLC|GRD|OCN)' \
+                      r'(?P<subproduct>[FHM_])'
+            errormessage = '[ASF writer] unknown product: {}'
+            targets = []
+            for scene in self.__scenes:
+                title = scene['title']
+                match = re.search(pattern, title)
+                if match:
+                    meta = match.groupdict()
+                    url = 'https://datapool.asf.alaska.edu'
+                    if meta['product'] == 'SLC':
+                        url += '/SLC'
+                    elif meta['product'] == 'GRD':
+                        url += '/GRD_{}D'.format(meta['subproduct'])
+                    else:
+                        raise RuntimeError(errormessage.format(title))
+                    url += re.sub(r'(S)1([AB])', r'/\1\2/', meta['sensor'])
+                    url += title + '.zip'
+                    targets.append(url)
+                else:
+                    raise RuntimeError(errormessage.format(title))
+            linebreak = '\n{}"'.format(' ' * 12)
+            filestring = ('",' + linebreak).join(targets)
+            replacement = linebreak + filestring + '"'
+            content = content.replace("'placeholder_files'", replacement)
+            content = content.replace("placeholder_targetdir", self.__download_dir)
+            with open(filename, 'w') as out:
+                out.write(content)
 
 ###########################################################
 # Example use of class
