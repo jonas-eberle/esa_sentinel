@@ -90,9 +90,11 @@ class bulk_downloader:
                          'client': 'BO_n7nTIlMljdvU6kRRB3g',
                          'redir': 'https://vertex-retired.daac.asf.alaska.edu/services/urs4_token_request'}
         
+        self.targetdir = 'placeholder_targetdir'
+        
         # Make sure we can write it our current directory
-        if os.access(os.getcwd(), os.W_OK) is False:
-            print("WARNING: Cannot write to current path! Check permissions for {0}".format(os.getcwd()))
+        if os.access(self.targetdir, os.W_OK) is False:
+            print("WARNING: Cannot write to current path! Check permissions for {0}".format(self.targetdir))
             exit(-1)
         
         # For SSL
@@ -302,7 +304,8 @@ class bulk_downloader:
     # Download the file
     def download_file_with_cookiejar(self, url, file_count, total, recursion=False):
         # see if we've already download this file and if it is that it is the correct size
-        download_file = os.path.basename(url).split('?')[0]
+        download_file_base = os.path.basename(url).split('?')[0]
+        download_file = os.path.join(self.targetdir, download_file_base)
         if os.path.isfile(download_file):
             try:
                 request = Request(url)
@@ -391,7 +394,7 @@ class bulk_downloader:
             print("({0}/{1}) Downloading {2}".format(file_count, total, url))
             
             # Open our local file for writing and build status bar
-            tf = tempfile.NamedTemporaryFile(mode='w+b', delete=False, dir='.')
+            tf = tempfile.NamedTemporaryFile(mode='w+b', delete=False, dir=self.targetdir)
             self.chunk_read(response, tf, report_hook=self.chunk_report)
             
             # Reset download status
