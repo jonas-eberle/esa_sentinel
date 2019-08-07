@@ -226,6 +226,8 @@ class SentinelDownloader(object):
             self._write_download_wget(filename)
         elif file_type == 'json':
             self._write_json(filename)
+        elif file_type == 'asf':
+            self._write_download_asf(filename)
         else:
             self._write_download_urls(filename)
         
