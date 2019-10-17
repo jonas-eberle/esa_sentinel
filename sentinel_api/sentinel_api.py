@@ -8,8 +8,6 @@ TODO:
 - Documentation
 """
 
-__version__ = '0.5.1'
-
 ###########################################################
 # imports
 ###########################################################
@@ -119,7 +117,7 @@ class SentinelDownloader(object):
         
         print('Found %s features' % len(self.__geometries))
     
-    def search(self, platform, min_overlap=0, download_dir=None, start_date=None, end_date=None,
+    def search(self, platform, min_overlap=0.001, download_dir=None, start_date=None, end_date=None,
                date_type='beginPosition', **keywords):
         """Search in ESA Data Hub for scenes with given arguments
 
@@ -454,7 +452,7 @@ class SentinelDownloader(object):
         return filtered
     
     @staticmethod
-    def _filter_overlap(scenes, wkt_geometry, min_overlap=0):
+    def _filter_overlap(scenes, wkt_geometry, min_overlap=0.001):
         """Filter scenes based on the minimum overlap to the area of interest
 
         Args:
@@ -473,9 +471,13 @@ class SentinelDownloader(object):
             for scene in scenes:
                 with wkt2vector(scene['footprint'], srs=4326) as vec2:
                     footprint_area = vec2.getArea()
-                    with intersect(vec1, vec2) as inter:
+                    inter = intersect(vec1, vec2)
+                    if inter is not None:
                         intersect_area = inter.getArea()
-                overlap = intersect_area / site_area
+                        overlap = intersect_area / site_area
+                        inter.close()
+                    else:
+                        overlap = 0
                 if overlap > min_overlap or (
                         site_area / footprint_area > 1 and intersect_area / footprint_area > min_overlap):
                     scene['_script_overlap'] = overlap * 100

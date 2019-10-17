@@ -1,4 +1,4 @@
-spatialist
+spatialist>=0.3
 progressbar2
 requests>=2.8.1
 gdal>=1.11.3
