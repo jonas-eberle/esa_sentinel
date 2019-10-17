@@ -119,7 +119,7 @@ class SentinelDownloader(object):
         
         print('Found %s features' % len(self.__geometries))
     
-    def search(self, platform, min_overlap=0, download_dir=None, start_date=None, end_date=None,
+    def search(self, platform, min_overlap=0.001, download_dir=None, start_date=None, end_date=None,
                date_type='beginPosition', **keywords):
         """Search in ESA Data Hub for scenes with given arguments
 
@@ -452,7 +452,7 @@ class SentinelDownloader(object):
         return filtered
     
     @staticmethod
-    def _filter_overlap(scenes, wkt_geometry, min_overlap=0):
+    def _filter_overlap(scenes, wkt_geometry, min_overlap=0.001):
         """Filter scenes based on the minimum overlap to the area of interest
 
         Args:
