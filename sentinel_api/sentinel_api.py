@@ -471,9 +471,13 @@ class SentinelDownloader(object):
             for scene in scenes:
                 with wkt2vector(scene['footprint'], srs=4326) as vec2:
                     footprint_area = vec2.getArea()
-                    with intersect(vec1, vec2) as inter:
+                    inter = intersect(vec1, vec2)
+                    if inter is not None:
                         intersect_area = inter.getArea()
-                overlap = intersect_area / site_area
+                        overlap = intersect_area / site_area
+                        inter.close()
+                    else:
+                        overlap = 0
                 if overlap > min_overlap or (
                         site_area / footprint_area > 1 and intersect_area / footprint_area > min_overlap):
                     scene['_script_overlap'] = overlap * 100
