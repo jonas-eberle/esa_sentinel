@@ -19,7 +19,6 @@ import sys
 import requests
 
 from osgeo import ogr
-ogr.UseExceptions()
 
 from spatialist.vector import Vector, wkt2vector, intersect
 
@@ -27,6 +26,8 @@ import json
 import progressbar as pb
 import zipfile as zf
 from datetime import datetime, date
+
+ogr.UseExceptions()
 
 
 class SentinelDownloader(object):
@@ -46,59 +47,86 @@ class SentinelDownloader(object):
         self.__esa_username = username
         self.__esa_password = password
     
-    def set_download_dir(self, download_dir):
-        """Set directory for check against existing downloaded files and as directory where to download
+    def download_all(self, download_dir=None):
+        """Download all scenes
 
         Args:
-            download_dir: Path to directory
+            download_dir: Define a directory where to download the scenes
+                (Default: Use default from class -> current directory)
+
+        Returns:
+            Dictionary of failed ('failed') and successfully ('success') downloaded scenes
 
         """
-        print('Setting download directory to %s' % download_dir)
-        if not os.path.exists(download_dir):
-            os.makedirs(download_dir)
+        if download_dir is None:
+            download_dir = self.__download_dir
         
-        self.__download_dir = download_dir
-    
-    def set_data_dir(self, data_dir):
-        """Set directory for check against existing downloaded files; this can be repeated multiple times to create a list of data directories
-
-        Args:
-            data_dir: Path to directory
-
-        """
-        print('Adding data directory {}'.format(data_dir))
-        self.__data_dirs.append(data_dir)
-    
-    def set_geometries(self, geometries):
-        """Manually set one or more geometries for data search
-
-        Args:
-            geometries: String or List representation of one or more Wkt Geometries,
-                Geometries have to be in Lat/Lng, EPSG:4326 projection!
-
-        """
-        # print('Set geometries:')
-        # print(geometries)
-        if isinstance(geometries, list):
-            self.__geometries = geometries
+        downloaded = []
+        downloaded_failed = []
         
-        elif isinstance(geometries, str):
-            self.__geometries = [geometries]
+        for scene in self.__scenes:
+            url = scene['url']
+            filename = scene['title'] + '.zip'
+            path = os.path.join(download_dir, filename)
+            print('===========================================================')
+            print('Download file path: %s' % path)
+            
+            try:
+                response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True)
+            except requests.exceptions.ConnectionError:
+                print('Connection Error')
+                continue
+            if 'Content-Length' not in response.headers:
+                print('Content-Length not found')
+                print(url)
+                continue
+            size = int(response.headers['Content-Length'].strip())
+            if size < 1000000:
+                print('The found scene is too small: %s (%s)' % (scene['title'], size))
+                print(url)
+                continue
+            
+            print('Size of the scene: %s MB' % (size / 1024 / 1024))  # show in MegaBytes
+            my_bytes = 0
+            widgets = ["Downloading: ", pb.Bar(marker="*", left="[", right=" "),
+                       pb.Percentage(), " ", pb.FileTransferSpeed(), "] ",
+                       " of {0}MB".format(str(round(size / 1024 / 1024, 2))[:4])]
+            pbar = pb.ProgressBar(widgets=widgets, maxval=size).start()
+            
+            try:
+                down = open(path, 'wb')
+                for buf in response.iter_content(1024):
+                    if buf:
+                        down.write(buf)
+                        my_bytes += len(buf)
+                        pbar.update(my_bytes)
+                pbar.finish()
+                down.close()
+            except KeyboardInterrupt:
+                print("\nKeyboard interruption, remove current download and exit execution of script")
+                os.remove(path)
+                sys.exit(0)
+            
+            # Check if file is valid
+            print("Check if file is valid: ")
+            valid = self._is_valid(path)
+            
+            if not valid:
+                downloaded_failed.append(path)
+                print('invalid file is being deleted.')
+                os.remove(path)
+            else:
+                downloaded.append(path)
         
-        else:
-            raise Exception('geometries parameter needs to be a list or a string')
-        
-        # Test first geometry
-        try:
-            vec = wkt2vector(self.__geometries[0], srs=4326)
-        except RuntimeError as e:
-            raise Exception('The first geometry is not valid! Error: %s' % e)
-        finally:
-            vec = None
+        return {'success': downloaded, 'failed': downloaded_failed}
     
     def get_geometries(self):
         """Return list of geometries"""
         return self.__geometries
+    
+    def get_scenes(self):
+        """Return searched and filtered scenes"""
+        return self.__scenes
     
     def load_sites(self, input_file):
         """
@@ -116,6 +144,22 @@ class SentinelDownloader(object):
             self.__geometries = vec.convert2wkt()
         
         print('Found %s features' % len(self.__geometries))
+    
+    @staticmethod
+    def multipolygon2list(wkt):
+        geom = ogr.CreateGeometryFromWkt(wkt)
+        if geom.GetGeometryName() == 'MULTIPOLYGON':
+            return [x.ExportToWkt() for x in geom]
+        else:
+            return [geom.ExportToWkt()]
+    
+    def print_scenes(self):
+        """Print title of searched and filtered scenes"""
+        
+        def sorter(x): return re.findall('[0-9T]{15}', x)[0]
+        
+        titles = sorted([x['title'] for x in self.__scenes], key=sorter)
+        print('\n'.join(titles))
     
     def search(self, platform, min_overlap=0.001, download_dir=None, start_date=None, end_date=None,
                date_type='beginPosition', **keywords):
@@ -198,24 +242,65 @@ class SentinelDownloader(object):
         print('%s total scenes after merging' % len(self.__scenes))
         print('===========================================================')
     
-    def get_scenes(self):
-        """Return searched and filtered scenes"""
-        return self.__scenes
+    def set_data_dir(self, data_dir):
+        """Set directory for check against existing downloaded files; this can be repeated multiple times to create a list of data directories
+
+        Args:
+            data_dir: Path to directory
+
+        """
+        print('Adding data directory {}'.format(data_dir))
+        self.__data_dirs.append(data_dir)
     
-    def print_scenes(self):
-        """Print title of searched and filtered scenes"""
+    def set_download_dir(self, download_dir):
+        """Set directory for check against existing downloaded files and as directory where to download
+
+        Args:
+            download_dir: Path to directory
+
+        """
+        print('Setting download directory to %s' % download_dir)
+        if not os.path.exists(download_dir):
+            os.makedirs(download_dir)
         
-        def sorter(x): return re.findall('[0-9T]{15}', x)[0]
+        self.__download_dir = download_dir
+    
+    def set_geometries(self, geometries):
+        """Manually set one or more geometries for data search
+
+        Args:
+            geometries: String or List representation of one or more Wkt Geometries,
+                Geometries have to be in Lat/Lng, EPSG:4326 projection!
+
+        """
+        # print('Set geometries:')
+        # print(geometries)
+        if isinstance(geometries, list):
+            self.__geometries = geometries
         
-        titles = sorted([x['title'] for x in self.__scenes], key=sorter)
-        print('\n'.join(titles))
+        elif isinstance(geometries, str):
+            self.__geometries = [geometries]
+        
+        else:
+            raise Exception('geometries parameter needs to be a list or a string')
+        
+        # Test first geometry
+        try:
+            vec = wkt2vector(self.__geometries[0], srs=4326)
+        except RuntimeError as e:
+            raise Exception('The first geometry is not valid! Error: %s' % e)
+        finally:
+            vec = None
     
     def write_results(self, file_type, filename, output=False):
         """Write results to disk in different kind of formats
 
         Args:
-            file_type: Use 'wget' to write download bash file with wget software, 'json' to write the dictionary object
-                to file, or 'url' to write a file with downloadable URLs
+            file_type: the file format to use:
+                - 'wget': download bash file with wget software
+                - 'json': write the dictionary object
+                - 'url': a file with downloadable URLs
+                - 'asf': a Python script for download from ASF Vertex
             filename: Path to file
             output: If True the written file will also be send to stdout (Default: False)
 
@@ -224,212 +309,14 @@ class SentinelDownloader(object):
             self._write_download_wget(filename)
         elif file_type == 'json':
             self._write_json(filename)
+        elif file_type == 'asf':
+            self._write_download_asf(filename)
         else:
             self._write_download_urls(filename)
         
         if output:
             with open(filename, 'r') as infile:
                 print(infile.read())
-    
-    def download_all(self, download_dir=None):
-        """Download all scenes
-
-        Args:
-            download_dir: Define a directory where to download the scenes
-                (Default: Use default from class -> current directory)
-
-        Returns:
-            Dictionary of failed ('failed') and successfully ('success') downloaded scenes
-
-        """
-        if download_dir is None:
-            download_dir = self.__download_dir
-        
-        downloaded = []
-        downloaded_failed = []
-        
-        for scene in self.__scenes:
-            url = scene['url']
-            filename = scene['title'] + '.zip'
-            path = os.path.join(download_dir, filename)
-            print('===========================================================')
-            print('Download file path: %s' % path)
-            
-            try:
-                response = requests.get(url, auth=(self.__esa_username, self.__esa_password), stream=True)
-            except requests.exceptions.ConnectionError:
-                print('Connection Error')
-                continue
-            if 'Content-Length' not in response.headers:
-                print('Content-Length not found')
-                print(url)
-                continue
-            size = int(response.headers['Content-Length'].strip())
-            if size < 1000000:
-                print('The found scene is too small: %s (%s)' % (scene['title'], size))
-                print(url)
-                continue
-            
-            print('Size of the scene: %s MB' % (size / 1024 / 1024))  # show in MegaBytes
-            my_bytes = 0
-            widgets = ["Downloading: ", pb.Bar(marker="*", left="[", right=" "),
-                       pb.Percentage(), " ", pb.FileTransferSpeed(), "] ",
-                       " of {0}MB".format(str(round(size / 1024 / 1024, 2))[:4])]
-            pbar = pb.ProgressBar(widgets=widgets, maxval=size).start()
-            
-            try:
-                down = open(path, 'wb')
-                for buf in response.iter_content(1024):
-                    if buf:
-                        down.write(buf)
-                        my_bytes += len(buf)
-                        pbar.update(my_bytes)
-                pbar.finish()
-                down.close()
-            except KeyboardInterrupt:
-                print("\nKeyboard interruption, remove current download and exit execution of script")
-                os.remove(path)
-                sys.exit(0)
-            
-            # Check if file is valid
-            print("Check if file is valid: ")
-            valid = self._is_valid(path)
-            
-            if not valid:
-                downloaded_failed.append(path)
-                print('invalid file is being deleted.')
-                os.remove(path)
-            else:
-                downloaded.append(path)
-        
-        return {'success': downloaded, 'failed': downloaded_failed}
-    
-    @staticmethod
-    def _is_valid(zipfile, minsize=1000000):
-        """
-        Test whether the downloaded zipfile is valid
-        Args:
-            zipfile: the file to be tested
-            minsize: the minimum accepted file size
-
-        Returns: True if the file is valid and False otherwise
-
-        """
-        if not os.path.getsize(zipfile) > minsize:
-            print('The downloaded scene is too small: {}'.format(os.path.basename(zipfile)))
-            return False
-        try:
-            archive = zf.ZipFile(zipfile, 'r')
-            try:
-                corrupt = True if archive.testzip() else False
-            except zlib.error:
-                corrupt = True
-            archive.close()
-        except zf.BadZipfile:
-            corrupt = True
-        if corrupt:
-            print('The downloaded scene is corrupt: {}'.format(os.path.basename(zipfile)))
-        else:
-            print('file seems to be valid.')
-        return not corrupt
-    
-    def _format_url(self, startindex, wkt_geometry, platform, date_filtering, **keywords):
-        """Format the search URL based on the arguments
-
-        Args:
-            wkt_geometry: Geometry in Wkt representation
-            platform: Satellite to search in
-            dateFiltering: filter of dates
-            **keywords: Further search parameters from ESA Data Hub
-
-        Returns:
-            url: String URL to search for this data
-
-        """
-        with wkt2vector(wkt_geometry, srs=4326) as vec:
-            bbox = vec.bbox().convert2wkt()[0]
-            
-        query_area = ' AND (footprint:"Intersects(%s)")' % bbox
-        filters = ''
-        for kw in sorted(keywords.keys()):
-            filters += ' AND (%s:%s)' % (kw, keywords[kw])
-        
-        url = os.path.join(self.__esa_api_url,
-                           'search?format=json&rows=100&start=%s&q=%s%s%s%s' %
-                           (startindex, platform, date_filtering, query_area, filters))
-        return url
-    
-    @staticmethod
-    def multipolygon2list(wkt):
-        geom = ogr.CreateGeometryFromWkt(wkt)
-        if geom.GetGeometryName() == 'MULTIPOLYGON':
-            return [x.ExportToWkt() for x in geom]
-        else:
-            return [geom.ExportToWkt()]
-    
-    def _search_request(self, url):
-        """Do the HTTP request to ESA Data Hub
-
-        Args:
-            url: HTTP URL to request
-
-        Returns:
-            List of scenes (result from _parseJSON method), empty list if an error occurred
-
-        """
-        try:
-            content = requests.get(url, auth=(self.__esa_username, self.__esa_password), verify=True)
-            if not content.status_code // 100 == 2:
-                print('Error: API returned unexpected response {}:'.format(content.status_code))
-                print(content.text)
-                return []
-            result = self._parse_json(content.json())
-            for item in result:
-                item['footprint'] = self.multipolygon2list(item['footprint'])[0]
-            return result
-        
-        except requests.exceptions.RequestException as exc:
-            print('Error: {}'.format(exc))
-            return []
-    
-    @staticmethod
-    def _parse_json(obj):
-        """Parse the JSON result from ESA Data Hub and create a dictionary for each scene
-
-        Args:
-            obj: Dictionary (if 1 scene) or list of scenes
-
-        Returns:
-            List of scenes, each represented as a dictionary
-
-        """
-        if 'entry' not in obj['feed']:
-            print('No results for this feed')
-            return []
-        
-        scenes = obj['feed']['entry']
-        if not isinstance(scenes, list):
-            scenes = [scenes]
-        scenes_dict = []
-        for scene in scenes:
-            item = {
-                'id': scene['id'],
-                'title': scene['title'],
-                'url': scene['link'][0]['href']
-            }
-            
-            for data in scene['str']:
-                item[data['name']] = data['content']
-            
-            for data in scene['date']:
-                item[data['name']] = data['content']
-            
-            for data in scene['int']:
-                item[data['name']] = data['content']
-            
-            scenes_dict.append(item)
-        
-        return scenes_dict
     
     def _filter_existing(self, scenes):
         """Filter scenes based on existing files in the define download directory and all further data directories
@@ -480,8 +367,63 @@ class SentinelDownloader(object):
                         site_area / footprint_area > 1 and intersect_area / footprint_area > min_overlap):
                     scene['_script_overlap'] = overlap * 100
                     filtered.append(scene)
-
+            
             return filtered
+    
+    def _format_url(self, startindex, wkt_geometry, platform, date_filtering, **keywords):
+        """Format the search URL based on the arguments
+
+        Args:
+            wkt_geometry: Geometry in Wkt representation
+            platform: Satellite to search in
+            dateFiltering: filter of dates
+            **keywords: Further search parameters from ESA Data Hub
+
+        Returns:
+            url: String URL to search for this data
+
+        """
+        with wkt2vector(wkt_geometry, srs=4326) as vec:
+            bbox = vec.bbox().convert2wkt()[0]
+        
+        query_area = ' AND (footprint:"Intersects(%s)")' % bbox
+        filters = ''
+        for kw in sorted(keywords.keys()):
+            filters += ' AND (%s:%s)' % (kw, keywords[kw])
+        
+        url = os.path.join(self.__esa_api_url,
+                           'search?format=json&rows=100&start=%s&q=%s%s%s%s' %
+                           (startindex, platform, date_filtering, query_area, filters))
+        return url
+    
+    @staticmethod
+    def _is_valid(zipfile, minsize=1000000):
+        """
+        Test whether the downloaded zipfile is valid
+        Args:
+            zipfile: the file to be tested
+            minsize: the minimum accepted file size
+
+        Returns: True if the file is valid and False otherwise
+
+        """
+        if not os.path.getsize(zipfile) > minsize:
+            print('The downloaded scene is too small: {}'.format(os.path.basename(zipfile)))
+            return False
+        try:
+            archive = zf.ZipFile(zipfile, 'r')
+            try:
+                corrupt = True if archive.testzip() else False
+            except zlib.error:
+                corrupt = True
+            archive.close()
+        except zf.BadZipfile:
+            corrupt = True
+        if corrupt:
+            print('The downloaded scene is corrupt: {}'.format(os.path.basename(zipfile)))
+        else:
+            print('file seems to be valid.')
+        return not corrupt
     
     @staticmethod
     def _merge_scenes(scenes1, scenes2):
@@ -505,32 +447,105 @@ class SentinelDownloader(object):
         
         return scenes1
     
-    def _write_json(self, filename):
-        """Write JSON representation of scenes list to file
+    @staticmethod
+    def _parse_json(obj):
+        """Parse the JSON result from ESA Data Hub and create a dictionary for each scene
 
         Args:
-            filename: Path to file to write in
+            obj: Dictionary (if 1 scene) or list of scenes
+
+        Returns:
+            List of scenes, each represented as a dictionary
 
         """
-        with open(filename, 'w') as outfile:
-            json.dump(self.__scenes, outfile)
-        return True
+        if 'entry' not in obj['feed']:
+            print('No results for this feed')
+            return []
+        
+        scenes = obj['feed']['entry']
+        if not isinstance(scenes, list):
+            scenes = [scenes]
+        scenes_dict = []
+        for scene in scenes:
+            item = {
+                'id': scene['id'],
+                'title': scene['title'],
+                'url': scene['link'][0]['href']
+            }
+            
+            for data in scene['str']:
+                item[data['name']] = data['content']
+            
+            for data in scene['date']:
+                item[data['name']] = data['content']
+            
+            for data in scene['int']:
+                item[data['name']] = data['content']
+            
+            scenes_dict.append(item)
+        
+        return scenes_dict
     
-    def _write_download_wget(self, filename):
-        """Write bash file to download scene URLs based on wget software
-        Please note: User authentication to ESA Data Hub (username, password) is being stored in plain text!
+    def _search_request(self, url):
+        """Do the HTTP request to ESA Data Hub
 
         Args:
-            filename: Path to file to write in
+            url: HTTP URL to request
+
+        Returns:
+            List of scenes (result from _parseJSON method), empty list if an error occurred
 
         """
-        with open(filename, 'w') as outfile:
+        try:
+            content = requests.get(url, auth=(self.__esa_username, self.__esa_password), verify=True)
+            if not content.status_code // 100 == 2:
+                print('Error: API returned unexpected response {}:'.format(content.status_code))
+                print(content.text)
+                return []
+            result = self._parse_json(content.json())
+            for item in result:
+                item['footprint'] = self.multipolygon2list(item['footprint'])[0]
+            return result
+        
+        except requests.exceptions.RequestException as exc:
+            print('Error: {}'.format(exc))
+            return []
+    
+    def _write_download_asf(self, filename):
+        template = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'asf_template.py')
+        
+        with open(template, 'r') as temp:
+            content = temp.read()
+            pattern = r'^(?P<sensor>S1[AB])_' \
+                      r'(?P<beam>S1|S2|S3|S4|S5|S6|IW|EW|WV|EN|N1|N2|N3|N4|N5|N6|IM)_' \
+                      r'(?P<product>SLC|GRD|OCN)' \
+                      r'(?P<subproduct>[FHM_])'
+            errormessage = '[ASF writer] unknown product: {}'
+            targets = []
             for scene in self.__scenes:
-                out = 'wget -c -T120 --no-check-certificate --user="{}" --password="{}" -O {}.zip "{}"\n'\
-                    .format(self.__esa_username, self.__esa_password,
-                            os.path.join(self.__download_dir, scene['title']), scene['url'].replace('$', '\$'))
-                
-                outfile.write(out)
+                title = scene['title']
+                match = re.search(pattern, title)
+                if match:
+                    meta = match.groupdict()
+                    url = 'https://datapool.asf.alaska.edu'
+                    if meta['product'] == 'SLC':
+                        url += '/SLC'
+                    elif meta['product'] == 'GRD':
+                        url += '/GRD_{}D'.format(meta['subproduct'])
+                    else:
+                        raise RuntimeError(errormessage.format(title))
+                    url += re.sub(r'(S)1([AB])', r'/\1\2/', meta['sensor'])
+                    url += title + '.zip'
+                    targets.append(url)
+                else:
+                    raise RuntimeError(errormessage.format(title))
+            linebreak = '\n{}"'.format(' ' * 12)
+            filestring = ('",' + linebreak).join(targets)
+            replacement = linebreak + filestring + '"'
+            content = content.replace("'placeholder_files'", replacement)
+            content = content.replace("placeholder_targetdir", self.__download_dir)
+            with open(filename, 'w') as out:
+                out.write(content)
     
     def _write_download_urls(self, filename):
         """Write URLs of scenes to text file
@@ -543,6 +558,33 @@ class SentinelDownloader(object):
             for scene in self.__scenes:
                 outfile.write(scene['url'] + '\n')
         return filename
+    
+    def _write_download_wget(self, filename):
+        """Write bash file to download scene URLs based on wget software
+        Please note: User authentication to ESA Data Hub (username, password) is being stored in plain text!
+
+        Args:
+            filename: Path to file to write in
+
+        """
+        with open(filename, 'w') as outfile:
+            for scene in self.__scenes:
+                out = 'wget -c -T120 --no-check-certificate --user="{}" --password="{}" -O {}.zip "{}"\n' \
+                    .format(self.__esa_username, self.__esa_password,
+                            os.path.join(self.__download_dir, scene['title']), scene['url'].replace('$', '\$'))
+                
+                outfile.write(out)
+    
+    def _write_json(self, filename):
+        """Write JSON representation of scenes list to file
+
+        Args:
+            filename: Path to file to write in
+
+        """
+        with open(filename, 'w') as outfile:
+            json.dump(self.__scenes, outfile)
+        return True
 
 
 ###########################################################
