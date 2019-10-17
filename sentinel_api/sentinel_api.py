@@ -296,8 +296,11 @@ class SentinelDownloader(object):
         """Write results to disk in different kind of formats
 
         Args:
-            file_type: Use 'wget' to write download bash file with wget software, 'json' to write the dictionary object
-                to file, or 'url' to write a file with downloadable URLs
+            file_type: the file format to use:
+                - 'wget': download bash file with wget software
+                - 'json': write the dictionary object
+                - 'url': a file with downloadable URLs
+                - 'asf': a Python script for download from ASF Vertex
             filename: Path to file
             output: If True the written file will also be send to stdout (Default: False)
 
