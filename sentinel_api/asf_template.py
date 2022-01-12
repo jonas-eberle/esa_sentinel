@@ -6,18 +6,18 @@
 #
 #    With embedded urls: ( download the hardcoded list of files in the 'files =' block below)
 #
-#       python ./download-all-2019-08-07_12-39-51.py
+#       python ./download-all-2022-01-12_12-16-07.py
 #
 #    Download all files in a Metalink/CSV: (downloaded from ASF Vertex)
 #
-#       python ./download-all-2019-08-07_12-39-51.py /path/to/downloads.metalink localmetalink.metalink localcsv.csv
+#       python ./download-all-2022-01-12_12-16-07.py /path/to/downloads.metalink localmetalink.metalink localcsv.csv
 #
 #    Compatibility: python >= 2.6.5, 2.7.5, 3.0
 #
 #    If downloading from a trusted source with invalid SSL Certs, use --insecure to ignore
 #
 #    For more information on bulk downloads, navigate to:
-#        https://www.asf.alaska.edu/data-tools/bulk-download/
+#        https://asf.alaska.edu/how-to/data-tools/data-tools/#bulk_download
 #
 #
 #
@@ -26,12 +26,9 @@
 #        http://bulk-download.asf.alaska.edu/help
 #
 
-import os
-import os.path
-import csv
-import sys
-import tempfile
-import shutil
+import sys, csv
+import os, os.path
+import tempfile, shutil
 import re
 
 import base64
@@ -39,6 +36,7 @@ import time
 import getpass
 import ssl
 import signal
+import socket
 
 import xml.etree.ElementTree as ET
 
@@ -88,8 +86,8 @@ class bulk_downloader:
         
         self.asf_urs4 = {'url': 'https://urs.earthdata.nasa.gov/oauth/authorize',
                          'client': 'BO_n7nTIlMljdvU6kRRB3g',
-                         'redir': 'https://vertex-retired.daac.asf.alaska.edu/services/urs4_token_request'}
-        
+                         'redir': 'https://auth.asf.alaska.edu/login'}
+
         self.targetdir = 'placeholder_targetdir'
         
         # Make sure we can write it our current directory
@@ -161,7 +159,7 @@ class bulk_downloader:
             
             # make sure cookie is still valid
             if self.check_cookie():
-                print(" > Re-using previous cookie jar.")
+                print(" > Reusing previous cookie jar.")
                 return True
             else:
                 print(" > Could not validate old cookie Jar")
@@ -264,7 +262,8 @@ class bulk_downloader:
         try:
             response = opener.open(request)
         except HTTPError as e:
-            if e.code == 401:
+            if "WWW-Authenticate" in e.headers and "Please enter your Earthdata Login credentials" in e.headers[
+                "WWW-Authenticate"]:
                 print(" > Username and Password combo was not successful. Please try again.")
                 return False
             else:
@@ -421,6 +420,10 @@ class bulk_downloader:
             if "ssl.c" in "{0}".format(e.reason):
                 print(
                     "IMPORTANT: Remote location may not be accepting your SSL configuration. This is a terminal error.")
+            return False, None
+        
+        except socket.timeout as e:
+            print(" > timeout requesting: {0}; {1}".format(url, e))
             return False, None
         
         except ssl.CertificateError as e:
