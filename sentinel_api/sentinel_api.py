@@ -362,6 +362,7 @@ class SentinelDownloader(object):
                         overlap = intersect_area / site_area
                         inter.close()
                     else:
+                        intersect_area = 0
                         overlap = 0
                 if overlap > min_overlap or (
                         site_area / footprint_area > 1 and intersect_area / footprint_area > min_overlap):
